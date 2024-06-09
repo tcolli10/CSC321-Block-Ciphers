@@ -30,7 +30,7 @@ def ecbDecrypt(ciphertext, key):
     return unpadText(plaintext)
 
 def cbcEncrypt(plaintext, key, iv):
-    cipher = AES.new(key, AES.MODE_CBC)
+    cipher = AES.new(key, AES.MODE_ECB)
     paddedText = padText(plaintext)
     ciphertext = b''
     previousBlock = iv
@@ -43,7 +43,7 @@ def cbcEncrypt(plaintext, key, iv):
     return ciphertext
 
 def cbcDecrypt(ciphertext, key, iv):
-    cipher = AES.new(key, AES.MODE_CBC)
+    cipher = AES.new(key, AES.MODE_ECB)
     plaintext = b''
     previousBlock = iv
     for i in range(0, len(ciphertext), 16):
@@ -92,65 +92,68 @@ def task1():
     else : 
         print('CBC encryption successful')
 
-def submit(key, iv):
-    userInput = quote(input("provide data\n"))
-    print(userInput)
+def submit(input, key, iv):
+    userInput = quote(input)
     fullString = f'userid=456;userdata={userInput};session-id=31337'
     return cbcEncrypt(fullString.encode(), key, iv)
 
 def verify(encryptedString, key, iv):
-    decryptedString = cbcDecrypt(encryptedString, key, iv).decode()
-    print(f'STRING FOUND: {decryptedString}')
-    if ';admin=true' in decryptedString: 
-        print('admin found')
+    decryptedString = cbcDecrypt(encryptedString, key, iv)
+    if b'admin=true' in decryptedString: 
+        print('USER IS ADMIN')
+        return True
     else: 
-        print('not admin')
+        print('USER IS NOT ADMIN')
+        return False
     
-def modifyEncryptedText(encryptedBytes, iv):
-    block_size = 16
 
-    # Position to modify: `;admin=true` needs to be placed correctly
-    prefix_length = len("userid=456;userdata=")
-    padding_length = 14
-    total_prefix_length = prefix_length + padding_length
-    target_block_index = total_prefix_length // block_size
-    target_byte_index = total_prefix_length % block_size
-
-    # Ensure flipping the correct block and byte index
-    print(f"Total prefix length: {total_prefix_length}")
-    print(f"Target block index: {target_block_index}")
-    print(f"Target byte index: {target_byte_index}")
-
-    # Original vs desired bytes
-    original_text = "AAAAAAAAAAAAAAA"
-    desired_text = ";admin=true;AAA"
-
-    modified_bytes = bytearray(encryptedBytes)
-
-    # Modify the previous block to change the bytes in the current block
-    for i in range(len(desired_text)):
-        # Calculate position in the ciphertext to flip
-        pos = target_block_index * block_size + target_byte_index + i
-        # XOR to modify the byte to the desired value
-        print(f'original: {original_text[i]} ; desired: {desired_text[i]}')
-        modified_bytes[pos] ^= ord(original_text[i]) ^ ord(desired_text[i])
-
-    return bytes(modified_bytes)
-
+def modifyCiphertext(encrypted, targetPosition, originalChar, targetChar):
+    xorDiff = ord(targetChar) ^ ord(originalChar)
+    
+    blockIndex = targetPosition // 16
+    byteIndex = targetPosition % 16
+    
+    modifiedEncrypted = bytearray(encrypted)
+    
+    prevBlockStart = (blockIndex - 1) * 16
+    modifiedEncrypted[prevBlockStart + byteIndex] ^= xorDiff
+    return bytes(modifiedEncrypted)
+    
 def task2(): 
     key = get_random_bytes(16)
     iv = get_random_bytes(16)
-    encryptedText = submit(key, iv)
-    #verify(encryptedText, key, iv)
-    modifiedText = modifyEncryptedText(encryptedText, iv)
-    #verify(modifiedText)
-    print(encryptedText)
-    print(modifiedText)
-    #print(modifiedText.decode())
 
+    # does not find admin 
+    print('Example 1:')
+    userInput = 'You’re the man now, dog'
+    encryptedText = submit(userInput, key, iv)
+    verify(encryptedText, key, iv)
+    print('\n')
+
+    print('Example 2:')
+    userInput = 'admin=true'
+    encryptedText = submit(userInput, key, iv)
+    verify(encryptedText, key, iv)
+    print('\n')
+
+    print('Example 3:')
+    userInput = 'admin9true'
+    encryptedText = submit(userInput, key, iv)
+    verify(encryptedText, key, iv)
+    print('\n')
+
+
+    
+    # attack that injects ;admin=true; into decrypted text
+    # input used for attack to work is "admin9true"
+    print('Attack results:')
+    userInput = 'admin9true'
+    encryptedText = submit(userInput, key, iv)
+    #put ; before admin9true;
+    modifiedText = modifyCiphertext(encryptedText, 19, '=', ';')
+    # change 9 to = in ;admin9true;
+    modifiedText = modifyCiphertext(modifiedText, 25, '9', '=')
     verify(modifiedText, key, iv)
-
-
 
 
 def main():
